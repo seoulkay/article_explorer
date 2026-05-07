@@ -1,0 +1,10 @@
+node_modules/
+# macOS
+.DS_Store
+
+# Environment files
+.env.local
+.env.local.example
+
+# Next.js generated files
+.next/
