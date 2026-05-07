@@ -42,7 +42,7 @@ export async function fetchArxivPapers(maxResults = 20): Promise<ArxivPaper[]> {
       abstract_en: (entry.summary || '').replace(/\n/g, ' ').trim(),
       authors: authors.slice(0, 5), // 최대 5명
       published_at: entry.published || '',
-      paper_url: `https://arxiv.org/abs/${id.split('v')[0]}`,
+      paper_url: `https://arxiv.org/html/${id.split('v')[0]}`,
     }
   })
 }

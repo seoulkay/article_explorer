@@ -7,6 +7,7 @@ export interface PaperAnalysis {
   performance: string
   github_url: string
   tags: string[]
+  easy_explanation: string
 }
 
 export async function analyzePaper(
@@ -27,7 +28,8 @@ export async function analyzePaper(
   "model": "제안된 또는 사용된 모델/방법론 이름 (없으면 '명시되지 않음')",
   "performance": "성능 향상 수치나 결과 (예: 'BLEU +2.3', 'Accuracy 94.5%', 없으면 '명시되지 않음')",
   "github_url": "초록에 GitHub URL이 있으면 추출, 없으면 빈 문자열",
-  "tags": ["관련 분야 태그 3-5개 (예: NLP, 컴퓨터비전, 강화학습, 생성모델, 멀티모달, 추천시스템, 의료AI 등)"]
+  "tags": ["관련 분야 태그 3-5개 (예: NLP, 컴퓨터비전, 강화학습, 생성모델, 멀티모달, 추천시스템, 의료AI 등)"],
+  "easy_explanation": "이 논문을 고등학생도 이해할 수 있게 비유와 예시를 들어 3-4문장으로 쉽게 설명. 전문 용어 최소화."
 }`
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -60,6 +62,7 @@ export async function analyzePaper(
       performance: '명시되지 않음',
       github_url: '',
       tags: ['AI'],
+      easy_explanation: '분석 실패',
     }
   }
 }

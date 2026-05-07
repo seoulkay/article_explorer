@@ -49,6 +49,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           model: analysis.model,
           performance: analysis.performance,
           github_url: analysis.github_url || null,
+          easy_explanation: analysis.easy_explanation || null,
           paper_url: paper.paper_url,
           tags: analysis.tags,
           authors: paper.authors,

@@ -15,9 +15,31 @@ interface Paper {
   tags: string[]
   authors: string[]
   published_at: string
+  easy_explanation: string
 }
 
 const ALL_TAGS = ['전체', 'NLP', '컴퓨터비전', '강화학습', '생성모델', '멀티모달', '추천시스템', '의료AI', '그래프신경망', '자율주행']
+
+
+function EasyExplain({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div style={{ marginBottom: 20, border: '1px solid #2e2e4e', borderRadius: 12, overflow: 'hidden' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{ width: '100%', padding: '10px 16px', background: '#1a1a2e', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: 'inherit' }}
+      >
+        <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 600, letterSpacing: '0.05em' }}>🎓 쉬운 설명 (고등학생도 이해 가능)</span>
+        <span style={{ fontSize: 12, color: '#666', transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>▼</span>
+      </button>
+      {open && (
+        <div style={{ padding: '14px 16px', background: '#111a11', borderTop: '1px solid #2e2e4e' }}>
+          <p style={{ fontSize: 13, color: '#d1fae5', lineHeight: 1.8 }}>{text}</p>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function Home() {
   const [papers, setPapers] = useState<Paper[]>([])
@@ -252,15 +274,20 @@ export default function Home() {
             ))}
 
             {/* 저자 */}
-            <div style={{ marginBottom: 20 }}>
+            <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600, marginBottom: 6 }}>👤 저자</div>
               <div style={{ fontSize: 12, color: '#888' }}>{(selectedPaper.authors || []).join(', ')}</div>
             </div>
 
+            {/* 쉬운 설명 (펼치기) */}
+            {selectedPaper.easy_explanation && selectedPaper.easy_explanation !== '분석 실패' && (
+              <EasyExplain text={selectedPaper.easy_explanation} />
+            )}
+
             {/* 링크 버튼들 */}
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <a href={selectedPaper.paper_url} target="_blank" rel="noopener noreferrer" style={{ height: 38, padding: '0 18px', background: '#6366f1', borderRadius: 10, color: 'white', fontSize: 13, display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
-                📄 arXiv 논문 보기
+              <a href={selectedPaper.paper_url.replace(/_$/, '')} target="_blank" rel="noopener noreferrer" style={{ height: 38, padding: '0 18px', background: '#6366f1', borderRadius: 10, color: 'white', fontSize: 13, display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
+                📖 arXiv HTML 보기
               </a>
               {selectedPaper.github_url && (
                 <a href={selectedPaper.github_url} target="_blank" rel="noopener noreferrer" style={{ height: 38, padding: '0 18px', background: '#1a1a2e', border: '1px solid #2e2e4e', borderRadius: 10, color: '#e2e2e8', fontSize: 13, display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
