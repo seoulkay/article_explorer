@@ -1,0 +1,16 @@
+name: Daily Crawl
+
+on:
+  schedule:
+    - cron: '0 18 * * *'  # 매일 UTC 18:00 = KST 03:00
+  workflow_dispatch:        # 수동 실행 버튼도 생김
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run crawler
+        run: |
+          curl -X POST https://your-site.vercel.app/api/scheduler \
+            -H "Authorization: Bearer ${{ secrets.CRAWL_SECRET }}" \
+            -H "Content-Type: application/json"

@@ -1,27 +1,50 @@
--- Supabase SQL Editor에서 실행하세요
--- https://supabase.com/dashboard → SQL Editor
-
+-- 기존 papers 테이블 (변경 없음)
 CREATE TABLE IF NOT EXISTS papers (
-  id TEXT PRIMARY KEY,                    -- arXiv ID (예: 2405.12345)
-  title_en TEXT NOT NULL,                 -- 영문 제목
-  title_ko TEXT,                          -- 한글 번역 제목
-  abstract_en TEXT,                       -- 영문 초록
-  summary_ko TEXT,                        -- 한글 3줄 요약
-  key_contributions TEXT,                 -- 핵심 기여점
-  dataset TEXT,                           -- 사용 데이터셋
-  model TEXT,                             -- 사용 모델
-  performance TEXT,                       -- 성능 향상 수치
-  github_url TEXT,                        -- GitHub 주소
-  paper_url TEXT,                         -- 논문 arXiv 주소
-  tags TEXT[],                            -- 분야 태그
-  authors TEXT[],                         -- 저자 목록
-  published_at TIMESTAMP,                 -- 게재일
-  created_at TIMESTAMP DEFAULT NOW()      -- 수집일
+  id TEXT PRIMARY KEY,
+  title_en TEXT NOT NULL,
+  title_ko TEXT,
+  abstract_en TEXT,
+  summary_ko TEXT,
+  key_contributions TEXT,
+  dataset TEXT,
+  model TEXT,
+  performance TEXT,
+  github_url TEXT,
+  easy_explanation TEXT,
+  paper_url TEXT,
+  tags TEXT[],
+  authors TEXT[],
+  published_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW()
 );
 
--- 검색용 인덱스
+-- 크롤링 로그 테이블
+CREATE TABLE IF NOT EXISTS crawl_logs (
+  id SERIAL PRIMARY KEY,
+  trigger TEXT DEFAULT 'manual',      -- 'manual' | 'scheduler'
+  target_count INT DEFAULT 50,
+  saved_count INT DEFAULT 0,
+  skipped_count INT DEFAULT 0,
+  error_count INT DEFAULT 0,
+  status TEXT DEFAULT 'running',      -- 'running' | 'retrying' | 'success' | 'failed'
+  message TEXT,
+  details JSONB,
+  started_at TIMESTAMP DEFAULT NOW(),
+  finished_at TIMESTAMP
+);
+
+-- 트렌드 분석 캐시 테이블
+CREATE TABLE IF NOT EXISTS trend_analysis (
+  id SERIAL PRIMARY KEY,
+  analysis_text TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 인덱스
+CREATE INDEX IF NOT EXISTS papers_created_at_idx ON papers(created_at DESC);
 CREATE INDEX IF NOT EXISTS papers_published_at_idx ON papers(published_at DESC);
 CREATE INDEX IF NOT EXISTS papers_tags_idx ON papers USING gin(tags);
+CREATE INDEX IF NOT EXISTS crawl_logs_started_at_idx ON crawl_logs(started_at DESC);
 
--- 전문 검색 인덱스
-CREATE INDEX IF NOT EXISTS papers_title_ko_idx ON papers USING gin(to_tsvector('simple', coalesce(title_ko, '')));
+-- easy_explanation 컬럼 (없으면 추가)
+ALTER TABLE papers ADD COLUMN IF NOT EXISTS easy_explanation TEXT;
