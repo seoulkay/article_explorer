@@ -11,6 +11,6 @@ jobs:
     steps:
       - name: Run crawler
         run: |
-          curl -X POST https://your-site.vercel.app/api/scheduler \
+          curl -X POST https://article-explorer-nine.vercel.app/api/scheduler \
             -H "Authorization: Bearer ${{ secrets.CRAWL_SECRET }}" \
             -H "Content-Type: application/json"
