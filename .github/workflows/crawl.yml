@@ -3,14 +3,29 @@ name: Daily Crawl
 on:
   schedule:
     - cron: '0 18 * * *'  # 매일 UTC 18:00 = KST 03:00
-  workflow_dispatch:        # 수동 실행 버튼도 생김
+  workflow_dispatch:        # GitHub Actions 탭에서 수동 실행 가능
 
 jobs:
   crawl:
     runs-on: ubuntu-latest
+    timeout-minutes: 30     # 최대 30분
+
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install --omit=dev
+
       - name: Run crawler
-        run: |
-          curl -X POST https://article-explorer-nine.vercel.app/api/scheduler \
-            -H "Authorization: Bearer ${{ secrets.CRAWL_SECRET }}" \
-            -H "Content-Type: application/json"
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CRAWL_COUNT: '30'
+        run: node scripts/crawl.mjs
