@@ -3,13 +3,16 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { parseStringPromise } from 'xml2js'
+import ws from 'ws'
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 const COUNT = parseInt(process.env.CRAWL_COUNT || '30')
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  realtime: { transport: ws }
+})
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
 // ── 로그 헬퍼 ──
