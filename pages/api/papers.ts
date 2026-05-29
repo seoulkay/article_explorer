@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { supabaseAdmin } from '../../lib/supabase'
+import { executeQuery, executeOne } from '../../lib/snowflake'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
@@ -9,42 +9,59 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const limitNum = parseInt(limit as string)
   const offset = (pageNum - 1) * limitNum
 
-  let query = supabaseAdmin
-    .from('papers')
-    .select('*', { count: 'exact' })
-    .order('created_at', { ascending: false }) // 수집 순서대로
-    .range(offset, offset + limitNum - 1)
+  // WHERE 조건 동적 빌드
+  const conditions: string[] = []
+  const binds: any[] = []
 
-  // 분석 실패 숨기기 (기본값)
   if (showFailed !== 'true') {
-    query = query.not('summary_ko', 'ilike', '%분석 실패%')
-    query = query.not('summary_ko', 'ilike', '%생성할 수 없%')
-    query = query.not('title_ko', 'eq', '')
+    conditions.push(`summary_ko NOT ILIKE '%분석 실패%'`)
+    conditions.push(`summary_ko NOT ILIKE '%생성할 수 없%'`)
+    conditions.push(`title_ko != ''`)
   }
 
   if (tag && tag !== '전체') {
-    query = query.contains('tags', [tag])
+    binds.push(JSON.stringify(tag as string)) // e.g. '"LLM"'
+    conditions.push(`ARRAY_CONTAINS(PARSE_JSON(:${binds.length}), tags)`)
   }
 
   if (q) {
-    query = query.or(`title_ko.ilike.%${q}%,title_en.ilike.%${q}%,summary_ko.ilike.%${q}%`)
+    const searchVal = `%${q}%`
+    binds.push(searchVal)
+    const idx = binds.length
+    conditions.push(`(title_ko ILIKE :${idx} OR title_en ILIKE :${idx} OR summary_ko ILIKE :${idx})`)
   }
 
-  const { data, error, count } = await query
-  if (error) return res.status(500).json({ error: error.message })
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
-  // 분야별 날짜 트렌드 데이터 (차트용) - 최근 30일
-  const { data: trendData } = await supabaseAdmin
-    .from('papers')
-    .select('tags, published_at')
-    .gte('published_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-    .order('published_at', { ascending: true })
+  // 총 개수
+  const countRow = await executeOne<{ cnt: number }>(
+    `SELECT COUNT(*) AS cnt FROM papers ${where}`,
+    binds
+  )
+  const total = countRow?.cnt ?? 0
+
+  // 페이지 데이터
+  const paginationBinds = [...binds, limitNum, offset]
+  const limitIdx = paginationBinds.length - 1
+  const offsetIdx = paginationBinds.length
+
+  const papers = await executeQuery(
+    `SELECT * FROM papers ${where} ORDER BY created_at DESC LIMIT :${limitIdx} OFFSET :${offsetIdx}`,
+    paginationBinds
+  )
+
+  // 분야별 트렌드 데이터 (최근 30일)
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const trendData = await executeQuery(
+    `SELECT tags, published_at FROM papers WHERE published_at >= :1 ORDER BY published_at ASC`,
+    [thirtyDaysAgo]
+  )
 
   res.status(200).json({
-    papers: data,
-    total: count,
+    papers,
+    total,
     page: pageNum,
     limit: limitNum,
-    trendData: trendData || [],
+    trendData,
   })
 }

@@ -1,7 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { fetchArxivPapers } from '../../lib/arxiv'
 import { analyzePaper } from '../../lib/analyzer'
-import { supabaseAdmin } from '../../lib/supabase'
+import { executeOne, executeMutation } from '../../lib/snowflake'
+
+// Vercel 함수 최대 실행시간 (Pro: 300초, Hobby: 60초)
+export const config = { maxDuration: 300 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -15,11 +18,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     // DB에 저장된 논문 수로 start 오프셋 계산 → 항상 새 논문 가져옴
-    const { count: dbCount } = await supabaseAdmin
-      .from('papers')
-      .select('*', { count: 'exact', head: true })
-
-    const startOffset = dbCount || 0
+    const countRow = await executeOne<{ cnt: number }>(`SELECT COUNT(*) AS cnt FROM papers`)
+    const startOffset = countRow?.cnt ?? 0
     console.log(`DB 논문 수: ${startOffset}, arXiv start: ${startOffset}`)
 
     const papers = await fetchArxivPapers(safeCount, startOffset)
@@ -31,40 +31,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     for (const paper of papers) {
       try {
-        // 혹시 모를 중복 체크 (id 기준)
-        const { data: existing } = await supabaseAdmin
-          .from('papers')
-          .select('id')
-          .eq('id', paper.id)
-          .maybeSingle()
+        // 중복 체크
+        const existing = await executeOne(
+          `SELECT id FROM papers WHERE id = :1`,
+          [paper.id]
+        )
 
         if (existing) {
           skipped.push(paper.id)
           continue
         }
 
-        // Claude로 분석 (JSON + 쉬운설명 병렬 호출)
+        // Claude로 분석
         const analysis = await analyzePaper(paper.title_en, paper.abstract_en)
 
-        const { error } = await supabaseAdmin.from('papers').insert({
-          id: paper.id,
-          title_en: paper.title_en,
-          title_ko: analysis.title_ko,
-          abstract_en: paper.abstract_en,
-          summary_ko: analysis.summary_ko,
-          key_contributions: analysis.key_contributions,
-          dataset: analysis.dataset,
-          model: analysis.model,
-          performance: analysis.performance,
-          github_url: analysis.github_url || null,
-          easy_explanation: analysis.easy_explanation || null,
-          paper_url: paper.paper_url,
-          tags: analysis.tags,
-          authors: paper.authors,
-          published_at: paper.published_at,
-        })
-
-        if (error) throw error
+        await executeMutation(
+          `INSERT INTO papers (
+            id, title_en, title_ko, abstract_en, summary_ko,
+            key_contributions, dataset, model, performance,
+            github_url, easy_explanation, paper_url,
+            tags, authors, published_at
+          ) VALUES (
+            :1, :2, :3, :4, :5,
+            :6, :7, :8, :9,
+            :10, :11, :12,
+            PARSE_JSON(:13), PARSE_JSON(:14), :15::TIMESTAMP_NTZ
+          )`,
+          [
+            paper.id,
+            paper.title_en,
+            analysis.title_ko,
+            paper.abstract_en,
+            analysis.summary_ko,
+            analysis.key_contributions,
+            analysis.dataset,
+            analysis.model,
+            analysis.performance,
+            analysis.github_url || null,
+            analysis.easy_explanation || null,
+            paper.paper_url,
+            JSON.stringify(analysis.tags),
+            JSON.stringify(paper.authors),
+            paper.published_at,
+          ]
+        )
 
         results.push({ id: paper.id, title_ko: analysis.title_ko })
         console.log(`✓ ${analysis.title_ko}`)
@@ -83,7 +93,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       saved: results.length,
       skipped: skipped.length,
       errors: errors.length,
-      total_in_db: (dbCount || 0) + results.length,
+      total_in_db: startOffset + results.length,
       results,
       error_details: errors,
     })

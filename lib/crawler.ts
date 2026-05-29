@@ -1,6 +1,6 @@
 import { fetchArxivPapers } from './arxiv'
 import { analyzePaper } from './analyzer'
-import { supabaseAdmin } from './supabase'
+import { executeOne, executeMutation } from './snowflake'
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
@@ -14,38 +14,53 @@ export interface CrawlResult {
 // 논문 한 편 저장
 async function savePaper(paper: any): Promise<{ ok: boolean; title_ko?: string; error?: string }> {
   // 중복 체크
-  const { data: existing } = await supabaseAdmin
-    .from('papers').select('id').eq('id', paper.id).maybeSingle()
+  const existing = await executeOne(
+    `SELECT id FROM papers WHERE id = :1`,
+    [paper.id]
+  )
   if (existing) return { ok: false, error: 'duplicate' }
 
   // Claude 분석
   const analysis = await analyzePaper(paper.title_en, paper.abstract_en)
 
-  const { error } = await supabaseAdmin.from('papers').insert({
-    id: paper.id,
-    title_en: paper.title_en,
-    title_ko: analysis.title_ko,
-    abstract_en: paper.abstract_en,
-    summary_ko: analysis.summary_ko,
-    key_contributions: analysis.key_contributions,
-    dataset: analysis.dataset,
-    model: analysis.model,
-    performance: analysis.performance,
-    github_url: analysis.github_url || null,
-    easy_explanation: analysis.easy_explanation || null,
-    paper_url: paper.paper_url,
-    tags: analysis.tags,
-    authors: paper.authors,
-    published_at: paper.published_at,
-  })
-  if (error) throw new Error(error.message)
+  await executeMutation(
+    `INSERT INTO papers (
+      id, title_en, title_ko, abstract_en, summary_ko,
+      key_contributions, dataset, model, performance,
+      github_url, easy_explanation, paper_url,
+      tags, authors, published_at
+    ) VALUES (
+      :1, :2, :3, :4, :5,
+      :6, :7, :8, :9,
+      :10, :11, :12,
+      PARSE_JSON(:13), PARSE_JSON(:14), :15::TIMESTAMP_NTZ
+    )`,
+    [
+      paper.id,
+      paper.title_en,
+      analysis.title_ko,
+      paper.abstract_en,
+      analysis.summary_ko,
+      analysis.key_contributions,
+      analysis.dataset,
+      analysis.model,
+      analysis.performance,
+      analysis.github_url || null,
+      analysis.easy_explanation || null,
+      paper.paper_url,
+      JSON.stringify(analysis.tags),
+      JSON.stringify(paper.authors),
+      paper.published_at,
+    ]
+  )
+
   return { ok: true, title_ko: analysis.title_ko }
 }
 
 // 메인 크롤링 함수 (재시도 포함)
 export async function runCrawl(
   count: number,
-  logId: number,
+  logId: string,
   onProgress?: (msg: string) => void
 ): Promise<CrawlResult> {
   const log = (msg: string) => {
@@ -56,15 +71,21 @@ export async function runCrawl(
   const result: CrawlResult = { saved: 0, skipped: 0, errors: 0, details: [] }
 
   // DB 논문 수로 오프셋 계산
-  const { count: dbCount } = await supabaseAdmin
-    .from('papers').select('*', { count: 'exact', head: true })
-  const startOffset = dbCount || 0
+  const countRow = await executeOne<{ cnt: number }>(`SELECT COUNT(*) AS cnt FROM papers`)
+  const startOffset = countRow?.cnt ?? 0
 
   log(`📥 arXiv 수집 시작 (offset: ${startOffset}, 목표: ${count}편)`)
 
   // 로그 업데이트 helper
-  const updateLog = async (patch: object) => {
-    await supabaseAdmin.from('crawl_logs').update(patch).eq('id', logId)
+  const updateLog = async (patch: Record<string, any>) => {
+    const sets = Object.keys(patch)
+      .map((k, i) => `${k} = :${i + 1}`)
+      .join(', ')
+    const values = [...Object.values(patch), logId]
+    await executeMutation(
+      `UPDATE crawl_logs SET ${sets} WHERE id = :${values.length}`,
+      values
+    )
   }
 
   // arXiv에서 논문 목록 가져오기 (Rate limit 재시도 포함)
@@ -76,7 +97,7 @@ export async function runCrawl(
       break
     } catch (e: any) {
       if (e.message?.includes('Rate') && attempt < 5) {
-        const wait = attempt * 15 // 15초, 30초, 45초, 60초
+        const wait = attempt * 15
         log(`⏳ Rate limit — ${wait}초 대기 후 재시도 (${attempt}/5)`)
         await updateLog({ status: 'retrying', message: `Rate limit 재시도 ${attempt}/5` })
         await sleep(wait * 1000)
@@ -106,7 +127,11 @@ export async function runCrawl(
 
         // 진행상황 로그 업데이트 (5편마다)
         if ((result.saved + result.skipped) % 5 === 0) {
-          await updateLog({ saved_count: result.saved, skipped_count: result.skipped, error_count: result.errors })
+          await updateLog({
+            saved_count: result.saved,
+            skipped_count: result.skipped,
+            error_count: result.errors,
+          })
         }
         break
 

@@ -1,3 +1,5 @@
+import { executeOne } from './snowflake'
+
 export interface PaperAnalysis {
   title_ko: string
   summary_ko: string
@@ -10,22 +12,37 @@ export interface PaperAnalysis {
   easy_explanation: string
 }
 
+const CORTEX_MODEL = 'mistral-large2'
+
+/** Snowflake Cortex로 텍스트 생성 */
+async function cortexComplete(prompt: string): Promise<string> {
+  const row = await executeOne<{ result: string }>(
+    `SELECT SNOWFLAKE.CORTEX.COMPLETE(
+       ?,
+       ARRAY_CONSTRUCT(OBJECT_CONSTRUCT('role', 'user', 'content', ?))
+     ):choices[0]:messages::VARCHAR AS result`,
+    [CORTEX_MODEL, prompt]
+  )
+  return row?.result?.trim() ?? ''
+}
+
 export async function analyzePaper(
   title_en: string,
   abstract_en: string
 ): Promise<PaperAnalysis> {
-
-  // JSON과 easy_explanation을 분리해서 두 번 호출 → 파싱 안정성 대폭 향상
+  // JSON과 easy_explanation을 병렬 호출
   const [structured, easyExp] = await Promise.all([
     fetchStructured(title_en, abstract_en),
     fetchEasyExplanation(title_en, abstract_en),
   ])
-
   return { ...structured, easy_explanation: easyExp }
 }
 
 // 1단계: 구조화된 메타데이터 (JSON 파싱)
-async function fetchStructured(title_en: string, abstract_en: string): Promise<Omit<PaperAnalysis, 'easy_explanation'>> {
+async function fetchStructured(
+  title_en: string,
+  abstract_en: string
+): Promise<Omit<PaperAnalysis, 'easy_explanation'>> {
   const prompt = `다음 AI 논문을 분석해 JSON으로만 응답하세요. 마크다운 없이 순수 JSON만 출력하세요.
 
 제목: ${title_en}
@@ -54,23 +71,7 @@ async function fetchStructured(title_en: string, abstract_en: string): Promise<O
   }
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY!,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1024,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    })
-
-    const data = await res.json()
-    const text = (data.content?.[0]?.text || '').trim()
-    // JSON 블록만 추출
+    const text = await cortexComplete(prompt)
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     if (!jsonMatch) return fallback
     return { ...fallback, ...JSON.parse(jsonMatch[0]) }
@@ -79,7 +80,7 @@ async function fetchStructured(title_en: string, abstract_en: string): Promise<O
   }
 }
 
-// 2단계: 쉬운 설명 (일반 텍스트 → 파싱 오류 없음)
+// 2단계: 쉬운 설명 (일반 텍스트)
 async function fetchEasyExplanation(title_en: string, abstract_en: string): Promise<string> {
   const prompt = `다음 AI 논문을 고등학생도 이해할 수 있게 설명해주세요. 전문 용어는 반드시 괄호로 풀어서 설명하세요.
 
@@ -107,21 +108,8 @@ async function fetchEasyExplanation(title_en: string, abstract_en: string): Prom
 이 연구의 의의를 비전문가도 이해할 수 있게 마무리.`
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY!,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1500,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    })
-    const data = await res.json()
-    return (data.content?.[0]?.text || '설명 생성 실패').trim()
+    const text = await cortexComplete(prompt)
+    return text || '설명 생성 실패'
   } catch {
     return '설명 생성 실패'
   }

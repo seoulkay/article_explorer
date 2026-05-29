@@ -1,15 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { supabaseAdmin } from '../../lib/supabase'
+import { executeQuery } from '../../lib/snowflake'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { data, error } = await supabaseAdmin
-    .from('crawl_logs')
-    .select('*')
-    .order('started_at', { ascending: false })
-    .limit(30)
+  const logs = await executeQuery(
+    `SELECT * FROM crawl_logs ORDER BY started_at DESC LIMIT 30`
+  ).catch((e: Error) => { throw e })
 
-  if (error) return res.status(500).json({ error: error.message })
-  res.status(200).json({ logs: data })
+  res.status(200).json({ logs })
 }

@@ -1,29 +1,33 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { supabaseAdmin } from '../../lib/supabase'
+import { randomUUID } from 'crypto'
+import { executeOne, executeQuery, executeMutation } from '../../lib/snowflake'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
   // 캐시 확인 (6시간 이내)
-  const { data: cached } = await supabaseAdmin
-    .from('trend_analysis')
-    .select('*')
-    .gte('created_at', new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString())
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()
+  const cached = await executeOne<{ analysis_text: string }>(
+    `SELECT analysis_text FROM trend_analysis
+     WHERE created_at >= :1::TIMESTAMP_NTZ
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [sixHoursAgo]
+  )
 
   if (cached) {
     return res.status(200).json({ analysis: cached.analysis_text, cached: true })
   }
 
   // 최근 7일 논문 데이터 수집
-  const { data: papers } = await supabaseAdmin
-    .from('papers')
-    .select('title_ko, tags, summary_ko, published_at')
-    .gte('published_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
-    .order('published_at', { ascending: false })
-    .limit(100)
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const papers = await executeQuery<{ title_ko: string; tags: any; summary_ko: string; published_at: string }>(
+    `SELECT title_ko, tags, summary_ko, published_at FROM papers
+     WHERE published_at >= :1::TIMESTAMP_NTZ
+     ORDER BY published_at DESC
+     LIMIT 100`,
+    [sevenDaysAgo]
+  )
 
   if (!papers || papers.length === 0) {
     return res.status(200).json({ analysis: '아직 분석할 논문 데이터가 충분하지 않아요. 논문을 더 수집해주세요!', cached: false })
@@ -31,7 +35,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // 태그 통계
   const tagCount: Record<string, number> = {}
-  papers.forEach(p => (p.tags || []).forEach((t: string) => { tagCount[t] = (tagCount[t] || 0) + 1 }))
+  papers.forEach(p => {
+    const tags = Array.isArray(p.tags) ? p.tags : []
+    tags.forEach((t: string) => { tagCount[t] = (tagCount[t] || 0) + 1 })
+  })
   const topTags = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 8)
 
   // 최근 논문 제목 샘플 (최대 20개)
@@ -64,24 +71,20 @@ ${titleSample}
 전문 용어는 괄호로 풀어서 설명해주세요. 구체적이고 흥미롭게 작성해주세요.`
 
   try {
-    const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY!,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    })
-    const aiData = await aiRes.json()
-    const analysis = aiData.content?.[0]?.text || '트렌드 분석 실패'
+    const cortexRow = await executeOne<{ result: string }>(
+      `SELECT SNOWFLAKE.CORTEX.COMPLETE(
+         'mistral-large2',
+         ARRAY_CONSTRUCT(OBJECT_CONSTRUCT('role', 'user', 'content', :1))
+       ):choices[0]:messages::VARCHAR AS result`,
+      [prompt]
+    )
+    const analysis = cortexRow?.result?.trim() || '트렌드 분석 실패'
 
-    // 캐시 저장
-    await supabaseAdmin.from('trend_analysis').insert({ analysis_text: analysis })
+    // 캐시 저장 (UUID 생성)
+    await executeMutation(
+      `INSERT INTO trend_analysis (id, analysis_text) VALUES (:1, :2)`,
+      [randomUUID(), analysis]
+    )
 
     res.status(200).json({ analysis, cached: false })
   } catch (e: any) {

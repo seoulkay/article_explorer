@@ -1,6 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { randomUUID } from 'crypto'
 import { runCrawl } from '../../lib/crawler'
-import { supabaseAdmin } from '../../lib/supabase'
+import { executeOne, executeMutation } from '../../lib/snowflake'
+
+// Vercel 함수 최대 실행시간 (Pro: 300초, Hobby: 60초)
+export const config = { maxDuration: 300 }
 
 // Vercel Cron 또는 외부 스케줄러에서 호출
 // Vercel cron: vercel.json에 설정
@@ -24,13 +28,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
 
-  const { data: todayLog } = await supabaseAdmin
-    .from('crawl_logs')
-    .select('id, status, saved_count')
-    .eq('trigger', 'scheduler')
-    .gte('started_at', todayStart.toISOString())
-    .eq('status', 'success')
-    .maybeSingle()
+  const todayLog = await executeOne<{ id: string; status: string; saved_count: number }>(
+    `SELECT id, status, saved_count FROM crawl_logs
+     WHERE trigger_type = 'scheduler'
+       AND started_at >= :1::TIMESTAMP_NTZ
+       AND status = 'success'
+     LIMIT 1`,
+    [todayStart.toISOString()]
+  )
 
   if (todayLog) {
     return res.status(200).json({
@@ -39,36 +44,51 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })
   }
 
-  // 로그 생성
-  const { data: log, error: logErr } = await supabaseAdmin
-    .from('crawl_logs')
-    .insert({ trigger: 'scheduler', target_count: 30, status: 'running' })
-    .select().single()
-
-  if (logErr || !log) {
+  // 로그 생성 (UUID를 클라이언트에서 생성)
+  const logId = randomUUID()
+  try {
+    await executeMutation(
+      `INSERT INTO crawl_logs (id, trigger_type, target_count, status)
+       VALUES (:1, 'scheduler', 30, 'running')`,
+      [logId]
+    )
+  } catch (e: any) {
     return res.status(500).json({ error: '로그 생성 실패' })
   }
 
   // Vercel은 함수 실행시간 제한이 있어서 응답 먼저 보내고 백그라운드 실행
-  res.status(200).json({ success: true, log_id: log.id, message: '스케줄러 실행 시작' })
+  res.status(200).json({ success: true, log_id: logId, message: '스케줄러 실행 시작' })
 
   // 백그라운드에서 크롤링 실행
   try {
-    const result = await runCrawl(30, log.id)
-    await supabaseAdmin.from('crawl_logs').update({
-      status: 'success',
-      finished_at: new Date().toISOString(),
-      saved_count: result.saved,
-      skipped_count: result.skipped,
-      error_count: result.errors,
-      message: `✅ 스케줄 완료 — 저장 ${result.saved}편 · 스킵 ${result.skipped}편 · 오류 ${result.errors}편`,
-      details: result.details,
-    }).eq('id', log.id)
+    const result = await runCrawl(30, logId)
+    await executeMutation(
+      `UPDATE crawl_logs SET
+        status = 'success',
+        finished_at = CURRENT_TIMESTAMP(),
+        saved_count = :1,
+        skipped_count = :2,
+        error_count = :3,
+        message = :4,
+        details = PARSE_JSON(:5)
+       WHERE id = :6`,
+      [
+        result.saved,
+        result.skipped,
+        result.errors,
+        `✅ 스케줄 완료 — 저장 ${result.saved}편 · 스킵 ${result.skipped}편 · 오류 ${result.errors}편`,
+        JSON.stringify(result.details),
+        logId,
+      ]
+    )
   } catch (e: any) {
-    await supabaseAdmin.from('crawl_logs').update({
-      status: 'failed',
-      finished_at: new Date().toISOString(),
-      message: `❌ 실패: ${e.message}`,
-    }).eq('id', log.id)
+    await executeMutation(
+      `UPDATE crawl_logs SET
+        status = 'failed',
+        finished_at = CURRENT_TIMESTAMP(),
+        message = :1
+       WHERE id = :2`,
+      [`❌ 실패: ${e.message}`, logId]
+    )
   }
 }
