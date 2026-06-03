@@ -17,9 +17,24 @@ const COUNT = parseInt(process.env.CRAWL_COUNT || '30')
 snowflake.configure({ logLevel: 'ERROR' })
 
 // ── Snowflake 헬퍼 ──
+function parseAccount(raw) {
+  // snowflake-sdk v1.15+ requires account to be a plain subdomain (no dots).
+  // If the secret contains the full locator (e.g. "YOUR_ACCOUNT_LOCATOR"),
+  // split it into account + host override.
+  if (!raw) return {}
+  const parts = raw.split('.')
+  if (parts.length === 1) return { account: raw }
+  // account is the first segment; reconstruct the host
+  return {
+    account: parts[0],
+    host: `${raw}.snowflakecomputing.com`,
+  }
+}
+
 function createConn() {
+  const { account, host } = parseAccount(SF_ACCOUNT)
   const opts = {
-    account: SF_ACCOUNT,
+    account,
     username: SF_USERNAME,
     authenticator: 'SNOWFLAKE_JWT',
     privateKey: SF_PRIVATE_KEY,
@@ -27,6 +42,7 @@ function createConn() {
     schema: SF_SCHEMA,
     warehouse: SF_WAREHOUSE,
   }
+  if (host) opts.host = host
   if (SF_PRIVATE_KEY_PASS) opts.privateKeyPass = SF_PRIVATE_KEY_PASS
   return snowflake.createConnection(opts)
 }
@@ -158,10 +174,7 @@ const CORTEX_MODEL = 'mistral-large2'
 
 async function cortexComplete(prompt) {
   const rows = await query(
-    `SELECT SNOWFLAKE.CORTEX.COMPLETE(
-       ?,
-       ARRAY_CONSTRUCT(OBJECT_CONSTRUCT('role', 'user', 'content', ?))
-     ):choices[0]:messages::VARCHAR AS result`,
+    `SELECT SNOWFLAKE.CORTEX.COMPLETE(?, ?) AS result`,
     [CORTEX_MODEL, prompt]
   )
   return rows[0]?.result?.trim() ?? ''
@@ -268,12 +281,11 @@ async function main() {
           key_contributions, dataset, model, performance,
           github_url, easy_explanation, paper_url,
           tags, authors, published_at
-        ) VALUES (
+        ) SELECT
           :1, :2, :3, :4, :5,
           :6, :7, :8, :9,
           :10, :11, :12,
-          PARSE_JSON(:13), PARSE_JSON(:14), :15::TIMESTAMP_NTZ
-        )`,
+          PARSE_JSON(:13), PARSE_JSON(:14), :15::TIMESTAMP_NTZ`,
         [
           paper.id,
           paper.title_en,

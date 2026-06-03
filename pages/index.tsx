@@ -8,7 +8,7 @@ interface Paper {
   published_at: string; created_at: string; easy_explanation: string
 }
 interface CrawlLog {
-  id: number; trigger: string; target_count: number; saved_count: number
+  id: string; trigger_type: string; target_count: number; saved_count: number
   skipped_count: number; error_count: number; status: string; message: string
   started_at: string; finished_at: string; details: any[]
 }
@@ -173,7 +173,6 @@ function TrendSection({ trendData }: { trendData: {tags:string[],published_at:st
 function LogViewer() {
   const [logs, setLogs] = useState<CrawlLog[]>([])
   const [loading, setLoading] = useState(false)
-  const [open, setOpen] = useState(false)
   const [selectedLog, setSelectedLog] = useState<CrawlLog|null>(null)
 
   const fetchLogs = useCallback(async () => {
@@ -182,66 +181,150 @@ function LogViewer() {
     finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { if (open) fetchLogs() }, [open])
+  useEffect(() => { fetchLogs() }, [])
 
   const statusColor = (s: string) => s==='success'?'#86efac':s==='failed'?'#f87171':s==='running'?'#60a5fa':'#fbbf24'
   const statusBg = (s: string) => s==='success'?'#112e11':s==='failed'?'#2e1111':s==='running'?'#111a2e':'#2e2a11'
   const fmtDur = (start: string, end: string) => {
-    if (!end) return '-'
+    if (!end) return '진행 중'
     const ms = new Date(end).getTime()-new Date(start).getTime()
     return ms>60000?`${Math.round(ms/60000)}분`:`${Math.round(ms/1000)}초`
   }
+  const fmtTime = (d: string) => d ? new Date(d).toLocaleString('ko-KR', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '-'
+
+  // 통계 요약
+  const stats = useMemo(() => {
+    const total = logs.length
+    const success = logs.filter(l=>l.status==='success').length
+    const failed = logs.filter(l=>l.status==='failed').length
+    const totalSaved = logs.reduce((sum,l)=>sum+(l.saved_count||0),0)
+    const totalErrors = logs.reduce((sum,l)=>sum+(l.error_count||0),0)
+    return { total, success, failed, totalSaved, totalErrors }
+  }, [logs])
 
   return (
-    <div style={{background:'#111122',border:'1px solid #1e1e2e',borderRadius:16,marginBottom:16,overflow:'hidden'}}>
-      <button onClick={()=>setOpen(o=>!o)} style={{width:'100%',padding:'12px 20px',background:'transparent',border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',fontFamily:'inherit'}}>
-        <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <span>📋</span>
-          <span style={{fontSize:13,fontWeight:600,color:'#e2e2e8'}}>수집 로그</span>
-          {logs.length>0 && <span style={{fontSize:10,color:'#555'}}>{logs.length}건</span>}
+    <div>
+      {/* 상단 통계 + 새로고침 */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+        <div style={{display:'flex',gap:16,alignItems:'center'}}>
+          <div style={{display:'flex',gap:12}}>
+            <div style={{background:'#111122',border:'1px solid #1e1e2e',borderRadius:10,padding:'10px 16px',textAlign:'center'}}>
+              <div style={{fontSize:18,fontWeight:700,color:'#e2e2e8'}}>{stats.total}</div>
+              <div style={{fontSize:10,color:'#555',marginTop:2}}>전체 실행</div>
+            </div>
+            <div style={{background:'#112e11',border:'1px solid #1e3e1e',borderRadius:10,padding:'10px 16px',textAlign:'center'}}>
+              <div style={{fontSize:18,fontWeight:700,color:'#86efac'}}>{stats.success}</div>
+              <div style={{fontSize:10,color:'#555',marginTop:2}}>성공</div>
+            </div>
+            <div style={{background:'#2e1111',border:'1px solid #3e1e1e',borderRadius:10,padding:'10px 16px',textAlign:'center'}}>
+              <div style={{fontSize:18,fontWeight:700,color:'#f87171'}}>{stats.failed}</div>
+              <div style={{fontSize:10,color:'#555',marginTop:2}}>실패</div>
+            </div>
+            <div style={{background:'#111122',border:'1px solid #1e1e2e',borderRadius:10,padding:'10px 16px',textAlign:'center'}}>
+              <div style={{fontSize:18,fontWeight:700,color:'#818cf8'}}>{stats.totalSaved}</div>
+              <div style={{fontSize:10,color:'#555',marginTop:2}}>총 저장</div>
+            </div>
+          </div>
         </div>
-        <div style={{display:'flex',alignItems:'center',gap:8}}>
-          {open && <button onClick={e=>{e.stopPropagation();fetchLogs()}} style={{fontSize:11,color:'#666',background:'#1a1a2e',border:'1px solid #2e2e4e',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontFamily:'inherit'}}>새로고침</button>}
-          <span style={{fontSize:11,color:'#555',display:'inline-block',transform:open?'rotate(180deg)':'rotate(0deg)',transition:'transform 0.2s'}}>▼</span>
-        </div>
-      </button>
+        <button onClick={fetchLogs} disabled={loading}
+          style={{height:34,padding:'0 14px',background:'#1a1a2e',border:'1px solid #2e2e4e',borderRadius:8,color:'#888',fontSize:12,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:6}}>
+          {loading ? <span style={{width:12,height:12,border:'2px solid #6366f1',borderTopColor:'transparent',borderRadius:'50%',animation:'spin 1s linear infinite',display:'inline-block'}}/> : '🔄'} 새로고침
+        </button>
+      </div>
 
-      {open && (
-        <div style={{borderTop:'1px solid #1e1e2e'}}>
-          {loading && <div style={{padding:'1.5rem',textAlign:'center',fontSize:12,color:'#555'}}>로그 불러오는 중...</div>}
-          {!loading && logs.length===0 && <div style={{padding:'1.5rem',textAlign:'center',fontSize:12,color:'#555'}}>로그가 없어요</div>}
-          {!loading && logs.map(log=>(
-            <div key={log.id} onClick={()=>setSelectedLog(log===selectedLog?null:log)}
-              style={{padding:'10px 20px',borderBottom:'1px solid #1a1a2e',cursor:'pointer',background:selectedLog?.id===log.id?'#1a1a2e':'transparent',transition:'background 0.1s'}}>
-              <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-                <span style={{fontSize:10,padding:'2px 8px',background:statusBg(log.status),color:statusColor(log.status),borderRadius:4,fontWeight:600}}>
-                  {log.status==='success'?'✅':log.status==='failed'?'❌':log.status==='running'?'🔄':'⏳'} {log.status}
-                </span>
-                <span style={{fontSize:11,color:'#888',fontFamily:'monospace'}}>{new Date(log.started_at).toLocaleString('ko-KR')}</span>
-                <span style={{fontSize:11,color:'#555'}}>{log.trigger==='scheduler'?'🕐 자동':'👤 수동'}</span>
-                <span style={{fontSize:11,color:'#555'}}>소요: {fmtDur(log.started_at,log.finished_at)}</span>
-                <div style={{marginLeft:'auto',display:'flex',gap:12}}>
-                  <span style={{fontSize:11,color:'#86efac'}}>저장 {log.saved_count||0}</span>
-                  <span style={{fontSize:11,color:'#555'}}>스킵 {log.skipped_count||0}</span>
-                  {(log.error_count||0)>0 && <span style={{fontSize:11,color:'#f87171'}}>오류 {log.error_count}</span>}
+      {/* 로그 리스트 */}
+      <div style={{background:'#111122',border:'1px solid #1e1e2e',borderRadius:16,overflow:'hidden'}}>
+        {/* 헤더 */}
+        <div style={{display:'grid',gridTemplateColumns:'80px 1fr 100px 100px 80px',padding:'10px 20px',borderBottom:'1px solid #1e1e2e',background:'#0d0d18'}}>
+          <span style={{fontSize:10,fontWeight:600,color:'#555',textTransform:'uppercase'}}>상태</span>
+          <span style={{fontSize:10,fontWeight:600,color:'#555',textTransform:'uppercase'}}>실행 시간</span>
+          <span style={{fontSize:10,fontWeight:600,color:'#555',textTransform:'uppercase'}}>결과</span>
+          <span style={{fontSize:10,fontWeight:600,color:'#555',textTransform:'uppercase'}}>소요</span>
+          <span style={{fontSize:10,fontWeight:600,color:'#555',textTransform:'uppercase'}}>트리거</span>
+        </div>
+
+        {loading && <div style={{padding:'2rem',textAlign:'center',fontSize:12,color:'#555'}}>로그 불러오는 중...</div>}
+        {!loading && logs.length===0 && <div style={{padding:'2rem',textAlign:'center',fontSize:12,color:'#555'}}>수집 로그가 없습니다</div>}
+
+        {!loading && logs.map(log=>(
+          <div key={log.id}>
+            <div onClick={()=>setSelectedLog(selectedLog?.id===log.id?null:log)}
+              style={{display:'grid',gridTemplateColumns:'80px 1fr 100px 100px 80px',padding:'12px 20px',borderBottom:'1px solid #1a1a2e',cursor:'pointer',background:selectedLog?.id===log.id?'#1a1a2e':'transparent',transition:'background 0.1s',alignItems:'center'}}
+              onMouseEnter={e=>{if(selectedLog?.id!==log.id)e.currentTarget.style.background='#141425'}}
+              onMouseLeave={e=>{if(selectedLog?.id!==log.id)e.currentTarget.style.background='transparent'}}>
+              <span style={{fontSize:11,padding:'3px 8px',background:statusBg(log.status),color:statusColor(log.status),borderRadius:4,fontWeight:600,textAlign:'center',width:'fit-content'}}>
+                {log.status==='success'?'성공':log.status==='failed'?'실패':log.status==='running'?'실행중':'대기'}
+              </span>
+              <span style={{fontSize:12,color:'#aaa',fontFamily:'monospace'}}>{fmtTime(log.started_at)}</span>
+              <div style={{display:'flex',gap:8,fontSize:11}}>
+                <span style={{color:'#86efac'}}>{log.saved_count||0}</span>
+                <span style={{color:'#555'}}>/</span>
+                <span style={{color:'#888'}}>{log.skipped_count||0}</span>
+                <span style={{color:'#555'}}>/</span>
+                <span style={{color:(log.error_count||0)>0?'#f87171':'#555'}}>{log.error_count||0}</span>
+              </div>
+              <span style={{fontSize:11,color:'#666'}}>{fmtDur(log.started_at,log.finished_at)}</span>
+              <span style={{fontSize:11,color:'#555'}}>{log.trigger_type==='scheduler'?'🕐 자동':'👤 수동'}</span>
+            </div>
+
+            {/* 상세 패널 */}
+            {selectedLog?.id===log.id && (
+              <div style={{background:'#0d0d18',borderBottom:'1px solid #1e1e2e',padding:'16px 20px'}}>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
+                  {/* 좌: 요약 정보 */}
+                  <div>
+                    <div style={{fontSize:11,fontWeight:600,color:'#818cf8',marginBottom:10}}>실행 정보</div>
+                    <div style={{display:'grid',gridTemplateColumns:'auto 1fr',gap:'6px 12px',fontSize:12}}>
+                      <span style={{color:'#555'}}>ID</span>
+                      <span style={{color:'#888',fontFamily:'monospace',fontSize:10}}>{log.id}</span>
+                      <span style={{color:'#555'}}>시작</span>
+                      <span style={{color:'#aaa'}}>{log.started_at ? new Date(log.started_at).toLocaleString('ko-KR') : '-'}</span>
+                      <span style={{color:'#555'}}>종료</span>
+                      <span style={{color:'#aaa'}}>{log.finished_at ? new Date(log.finished_at).toLocaleString('ko-KR') : '-'}</span>
+                      <span style={{color:'#555'}}>목표</span>
+                      <span style={{color:'#aaa'}}>{log.target_count}편</span>
+                      <span style={{color:'#555'}}>결과</span>
+                      <span style={{color:'#aaa'}}>저장 {log.saved_count||0} · 스킵 {log.skipped_count||0} · 오류 {log.error_count||0}</span>
+                    </div>
+                    {log.message && (
+                      <div style={{marginTop:12,fontSize:12,color:'#888',padding:'8px 12px',background:'#111122',borderRadius:6,border:'1px solid #1e1e2e'}}>
+                        {log.message}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 우: 상세 논문 목록 */}
+                  <div>
+                    <div style={{fontSize:11,fontWeight:600,color:'#818cf8',marginBottom:10}}>논문별 결과</div>
+                    {log.details && (log.details as any[]).length > 0 ? (
+                      <div style={{maxHeight:200,overflowY:'auto',borderRadius:8,border:'1px solid #1e1e2e'}}>
+                        {(log.details as any[]).map((d,i)=>(
+                          <div key={i} style={{padding:'6px 12px',borderBottom:'1px solid #1a1a2e',fontSize:11,display:'flex',alignItems:'center',gap:8}}>
+                            <span style={{width:16,textAlign:'center'}}>
+                              {d.error==='중복'?'⏭':d.error?'❌':'✅'}
+                            </span>
+                            <span style={{flex:1,color:d.error&&d.error!=='중복'?'#f87171':d.error==='중복'?'#666':'#ccc',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                              {d.title_ko||d.id}
+                            </span>
+                            {d.error&&d.error!=='중복' && (
+                              <span style={{fontSize:10,color:'#f87171',background:'#2e1111',padding:'1px 6px',borderRadius:3,whiteSpace:'nowrap'}}>
+                                {d.error.slice(0,40)}{d.error.length>40?'...':''}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{fontSize:11,color:'#555',padding:'12px',textAlign:'center'}}>상세 정보 없음</div>
+                    )}
+                  </div>
                 </div>
               </div>
-              {log.message && <div style={{fontSize:11,color:'#666',marginTop:4}}>{log.message}</div>}
-
-              {/* 상세 펼치기 */}
-              {selectedLog?.id===log.id && log.details && (
-                <div style={{marginTop:10,maxHeight:200,overflowY:'auto',background:'#0a0a0f',borderRadius:8,padding:'10px 12px'}}>
-                  {(log.details as any[]).map((d,i)=>(
-                    <div key={i} style={{fontSize:11,lineHeight:1.8,color:d.error&&d.error!=='중복'?'#f87171':d.error==='중복'?'#555':'#86efac'}}>
-                      {d.error==='중복'?'⏭':d.error?'✗':'✓'} {d.title_ko||d.id} {d.error&&d.error!=='중복'?`(${d.error})`:''}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+            )}
+          </div>
+        ))}
+      </div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )
 }

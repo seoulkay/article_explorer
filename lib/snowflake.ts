@@ -4,10 +4,18 @@ import snowflake from 'snowflake-sdk'
 snowflake.configure({ logLevel: 'ERROR' })
 
 function buildConnectionOptions(): snowflake.ConnectionOptions {
-  const privateKey = process.env.SNOWFLAKE_PRIVATE_KEY!.replace(/\\n/g, '\n')
+  const rawKey = process.env.SNOWFLAKE_PRIVATE_KEY
+  if (!rawKey) throw new Error('환경변수 SNOWFLAKE_PRIVATE_KEY가 설정되지 않았습니다.')
+  const privateKey = rawKey.replace(/\\n/g, '\n')
+
+  // snowflake-sdk v1.15+ requires account to be a plain subdomain (no dots).
+  const rawAccount = process.env.SNOWFLAKE_ACCOUNT!
+  const accountParts = rawAccount.split('.')
+  const account = accountParts[0]
+  const host = accountParts.length > 1 ? `${rawAccount}.snowflakecomputing.com` : undefined
 
   const opts: snowflake.ConnectionOptions = {
-    account: process.env.SNOWFLAKE_ACCOUNT!,
+    account,
     username: process.env.SNOWFLAKE_USERNAME!,
     authenticator: 'SNOWFLAKE_JWT',
     privateKey,
@@ -15,6 +23,8 @@ function buildConnectionOptions(): snowflake.ConnectionOptions {
     schema: process.env.SNOWFLAKE_SCHEMA!,
     warehouse: process.env.SNOWFLAKE_WAREHOUSE!,
   }
+
+  if (host) (opts as any).host = host
 
   const passphrase = process.env.SNOWFLAKE_PRIVATE_KEY_PASSPHRASE
   if (passphrase) {
