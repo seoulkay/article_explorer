@@ -1,5 +1,4 @@
 -- Snowflake DDL for Article Explorer
--- Account: YOUR_ACCOUNT
 -- Database: ARTICLE_EXPLORER, Schema: PUBLIC
 
 CREATE DATABASE IF NOT EXISTS ARTICLE_EXPLORER;

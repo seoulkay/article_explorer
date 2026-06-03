@@ -19,12 +19,11 @@ snowflake.configure({ logLevel: 'ERROR' })
 // ── Snowflake 헬퍼 ──
 function parseAccount(raw) {
   // snowflake-sdk v1.15+ requires account to be a plain subdomain (no dots).
-  // If the secret contains the full locator (e.g. "YOUR_ACCOUNT_LOCATOR"),
+  // If the value contains dots (e.g. "orgname-account.region.cloud"),
   // split it into account + host override.
   if (!raw) return {}
   const parts = raw.split('.')
   if (parts.length === 1) return { account: raw }
-  // account is the first segment; reconstruct the host
   return {
     account: parts[0],
     host: `${raw}.snowflakecomputing.com`,

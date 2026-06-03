@@ -1,10 +1,26 @@
 node_modules/
+
 # macOS
 .DS_Store
 
 # Environment files
+.env
+.env.*
 .env.local
 .env.local.example
 
 # Next.js generated files
 .next/
+out/
+
+# Private keys
+*.pem
+*.key
+*.p8
+
+# Coverage
+coverage/
+
+# IDE
+.vscode/
+.idea/
