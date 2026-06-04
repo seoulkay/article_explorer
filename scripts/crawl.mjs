@@ -146,7 +146,13 @@ async function fetchArxiv(count, start) {
       continue
     }
 
-    const parsed = await parseStringPromise(text, { explicitArray: false })
+    let parsed
+    try {
+      parsed = await parseStringPromise(text, { explicitArray: false })
+    } catch (xmlErr) {
+      console.log(`⚠️ XML 파싱 실패 (재시도): ${xmlErr.message.slice(0, 80)}`)
+      continue
+    }
     const entries = parsed?.feed?.entry
     if (!entries) return []
     const list = Array.isArray(entries) ? entries : [entries]
