@@ -132,15 +132,17 @@ async function fetchArxiv(count, start) {
   const q = 'cat:cs.AI+OR+cat:cs.LG+OR+cat:cs.CV+OR+cat:cs.CL'
   const url = `https://export.arxiv.org/api/query?search_query=${q}&sortBy=submittedDate&sortOrder=descending&max_results=${count}&start=${start}`
 
-  for (let attempt = 1; attempt <= 5; attempt++) {
-    const res = await fetch(url, { headers: { 'User-Agent': 'ArxivExplorer/1.0' } })
+  for (let attempt = 1; attempt <= 7; attempt++) {
+    if (attempt > 1) {
+      const wait = attempt * 30
+      console.log(`⏳ Rate limit — ${wait}초 대기 (${attempt - 1}/6)`)
+      await updateLog({ status: 'retrying', message: `Rate limit 재시도 ${attempt - 1}/6` })
+      await sleep(wait * 1000)
+    }
+    const res = await fetch(url, { headers: { 'User-Agent': 'ArxivExplorer/1.0 (mailto:kay.lee@snowflake.com)' } })
     const text = await res.text()
 
     if (text.includes('Rate exceeded')) {
-      const wait = attempt * 15
-      console.log(`⏳ Rate limit — ${wait}초 대기 (${attempt}/5)`)
-      await updateLog({ status: 'retrying', message: `Rate limit 재시도 ${attempt}/5` })
-      await sleep(wait * 1000)
       continue
     }
 
@@ -165,7 +167,7 @@ async function fetchArxiv(count, start) {
       }
     })
   }
-  throw new Error('arXiv Rate limit 초과 — 재시도 횟수 초과')
+  throw new Error('arXiv Rate limit 초과 — 6회 재시도 후 포기 (총 ~10분 대기)')
 }
 
 // ── Snowflake Cortex AI 분석 ──
@@ -179,7 +181,7 @@ async function cortexComplete(prompt) {
   return rows[0]?.result?.trim() ?? ''
 }
 
-// ── Claude 분석 ──
+// ── AI 분석 ──
 async function analyzeStructured(title, abstract) {
   const prompt = `다음 AI 논문을 분석해 JSON으로만 응답하세요. 마크다운 없이 순수 JSON만 출력하세요.
 
@@ -247,6 +249,11 @@ async function main() {
   const countRow = await queryOne(`SELECT COUNT(*) AS cnt FROM papers`)
   const startOffset = countRow?.cnt ?? 0
   console.log(`📊 현재 DB: ${startOffset}편, 목표 수집: ${COUNT}편 (offset: ${startOffset})`)
+
+  // arXiv rate limit 회피: 요청 전 랜덤 지연 (5~15초)
+  const jitter = 5000 + Math.random() * 10000
+  console.log(`⏳ arXiv 요청 전 ${(jitter / 1000).toFixed(1)}초 대기...`)
+  await sleep(jitter)
 
   const papers = await fetchArxiv(COUNT, startOffset)
   console.log(`📥 arXiv에서 ${papers.length}편 수신`)

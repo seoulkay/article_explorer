@@ -20,7 +20,7 @@ async function savePaper(paper: any): Promise<{ ok: boolean; title_ko?: string; 
   )
   if (existing) return { ok: false, error: 'duplicate' }
 
-  // Claude 분석
+  // Cortex AI 분석
   const analysis = await analyzePaper(paper.title_en, paper.abstract_en)
 
   await executeMutation(
@@ -151,7 +151,7 @@ export async function runCrawl(
       }
     }
 
-    // 논문 간 간격 (arXiv 권장: 3초, Claude API 부하 방지)
+    // 논문 간 간격 (arXiv 권장: 3초, API 부하 방지)
     if (i < papers.length - 1) await sleep(3000)
   }
 

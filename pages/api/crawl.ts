@@ -42,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           continue
         }
 
-        // Claude로 분석
+        // Cortex AI로 분석
         const analysis = await analyzePaper(paper.title_en, paper.abstract_en)
 
         await executeMutation(
