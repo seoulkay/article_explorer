@@ -23,7 +23,10 @@ CREATE TABLE IF NOT EXISTS papers (
   tags ARRAY,
   authors ARRAY,
   published_at TIMESTAMP_NTZ,
-  created_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+  created_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+  source VARCHAR DEFAULT 'arxiv',
+  journal_name VARCHAR,
+  doi VARCHAR
 );
 
 -- 크롤링 로그 테이블 (id: UUID 문자열, 클라이언트에서 생성)
