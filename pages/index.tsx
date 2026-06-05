@@ -22,7 +22,7 @@ const TAG_COLORS: Record<string,string> = {
 
 // ── EasyExplain ──
 function EasyExplain({ text }: { text: string }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
   const renderSections = (raw: string) => {
     const lines = raw.split('\n'); const els: React.ReactNode[] = []; let k = 0
     for (const line of lines) {
