@@ -6,6 +6,7 @@ interface Paper {
   key_contributions: string; dataset: string; model: string; performance: string
   github_url: string; paper_url: string; tags: string[]; authors: string[]
   published_at: string; created_at: string; easy_explanation: string
+  source: string; journal_name: string; doi: string
 }
 interface CrawlLog {
   id: string; trigger_type: string; target_count: number; saved_count: number
@@ -264,7 +265,7 @@ function LogViewer() {
                 <span style={{color:(log.error_count||0)>0?'#f87171':'#555'}}>{log.error_count||0}</span>
               </div>
               <span style={{fontSize:11,color:'#666'}}>{fmtDur(log.started_at,log.finished_at)}</span>
-              <span style={{fontSize:11,color:'#555'}}>{log.trigger_type==='scheduler'?'🕐 자동':'👤 수동'}</span>
+              <span style={{fontSize:11,color:'#555'}}>{log.trigger_type==='scheduler'?'🕐 arXiv':log.trigger_type==='scie_scheduler'?'📚 SCIE':'👤 수동'}</span>
             </div>
 
             {/* 상세 패널 */}
@@ -468,6 +469,10 @@ export default function Home() {
                       onMouseLeave={e=>e.currentTarget.style.borderColor=isFailed(paper)?'#3e1e1e':'#1e1e2e'}>
                       {isFailed(paper)&&<div style={{position:'absolute',top:10,right:10,fontSize:10,color:'#ef4444',background:'#2e1111',padding:'2px 6px',borderRadius:4}}>⚠️ 분석실패</div>}
                       <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
+                        <span style={{fontSize:10,padding:'2px 8px',background:paper.source==='scie'?'#1e2e1e':'#1e1e3f',color:paper.source==='scie'?'#86efac':'#818cf8',borderRadius:4,fontWeight:600}}>
+                          {paper.source==='scie'?'SCIE':'arXiv'}
+                        </span>
+                        {paper.journal_name && <span style={{fontSize:10,padding:'2px 8px',background:'#1a1a2e',color:'#888',borderRadius:4}}>{paper.journal_name}</span>}
                         {(paper.tags||[]).slice(0,3).map(tag=>(<span key={tag} style={{fontSize:10,padding:'2px 8px',background:'#1e1e3f',color:TAG_COLORS[tag]||'#818cf8',borderRadius:4}}>{tag}</span>))}
                       </div>
                       <h3 style={{fontSize:14,fontWeight:600,lineHeight:1.5,marginBottom:8,color:'#e2e2e8'}}>{paper.title_ko||paper.title_en}</h3>
