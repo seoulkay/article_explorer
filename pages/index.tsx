@@ -523,7 +523,7 @@ export default function Home() {
             </div>
             {selectedPaper.easy_explanation&&!selectedPaper.easy_explanation.includes('실패')&&<EasyExplain text={selectedPaper.easy_explanation}/>}
             <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
-              <a href={selectedPaper.paper_url.replace(/_$/,'')} target="_blank" rel="noopener noreferrer" style={{height:38,padding:'0 18px',background:'#6366f1',borderRadius:10,color:'white',fontSize:13,display:'flex',alignItems:'center',textDecoration:'none'}}>📖 arXiv HTML 보기</a>
+              <a href={selectedPaper.paper_url.replace(/_$/,'')} target="_blank" rel="noopener noreferrer" style={{height:38,padding:'0 18px',background:'#6366f1',borderRadius:10,color:'white',fontSize:13,display:'flex',alignItems:'center',textDecoration:'none'}}>📖 원문 보기</a>
               {selectedPaper.github_url&&<a href={selectedPaper.github_url} target="_blank" rel="noopener noreferrer" style={{height:38,padding:'0 18px',background:'#1a1a2e',border:'1px solid #2e2e4e',borderRadius:10,color:'#e2e2e8',fontSize:13,display:'flex',alignItems:'center',textDecoration:'none'}}>⚡ GitHub 코드</a>}
               <button onClick={()=>setSelectedPaper(null)} style={{height:38,padding:'0 18px',background:'transparent',border:'1px solid #2e2e4e',borderRadius:10,color:'#666',fontSize:13,cursor:'pointer',fontFamily:'inherit',marginLeft:'auto'}}>닫기</button>
             </div>
