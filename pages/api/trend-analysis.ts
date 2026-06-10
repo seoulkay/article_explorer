@@ -70,10 +70,7 @@ ${titleSample}
 
   try {
     const cortexRow = await executeOne<{ result: string }>(
-      `SELECT SNOWFLAKE.CORTEX.COMPLETE(
-         'mistral-large2',
-         ARRAY_CONSTRUCT(OBJECT_CONSTRUCT('role', 'user', 'content', :1))
-       ):choices[0]:messages::VARCHAR AS result`,
+      `SELECT SNOWFLAKE.CORTEX.COMPLETE('mistral-large2', :1) AS result`,
       [prompt]
     )
     const analysis = cortexRow?.result?.trim() || '트렌드 분석 실패'
