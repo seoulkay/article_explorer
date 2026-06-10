@@ -71,16 +71,13 @@ function TrendSection({ trendData }: { trendData: {tags:string[],published_at:st
   }, [open])
 
   const chartData = useMemo(() => {
-    if (!trendData.length) return { dates: [], series: [] }
-    const dateMap: Record<string,Record<string,number>> = {}
+    if (!trendData.length) return { tags: [] as {tag:string,count:number,color:string}[] }
+    const tagCount: Record<string,number> = {}
     trendData.forEach(p => {
-      const date = p.published_at?.slice(0,10) || ''; if (!date) return
-      if (!dateMap[date]) dateMap[date] = {}
-      ;(p.tags||[]).forEach(tag => { dateMap[date][tag] = (dateMap[date][tag]||0)+1 })
+      ;(p.tags||[]).forEach(tag => { tagCount[tag] = (tagCount[tag]||0)+1 })
     })
-    const dates = Object.keys(dateMap).sort()
-    const topTags = ['NLP','컴퓨터비전','강화학습','생성모델','멀티모달']
-    return { dates, series: topTags.map(tag => ({ tag, color: TAG_COLORS[tag]||'#888', values: dates.map(d => dateMap[d]?.[tag]||0) })) }
+    const sorted = Object.entries(tagCount).sort((a,b) => b[1]-a[1]).slice(0,8)
+    return { tags: sorted.map(([tag,count]) => ({ tag, count, color: TAG_COLORS[tag]||'#818cf8' })) }
   }, [trendData])
 
   const renderAnalysis = (text: string) => {
@@ -96,13 +93,10 @@ function TrendSection({ trendData }: { trendData: {tags:string[],published_at:st
     })
   }
 
-  const W=700, H=180, PAD={top:16,right:110,bottom:36,left:36}
+  const W=500, H=200, PAD={top:12,right:20,bottom:12,left:100}
   const innerW=W-PAD.left-PAD.right, innerH=H-PAD.top-PAD.bottom
-  const maxVal = Math.max(...(chartData.series.flatMap(s=>s.values)),1)
-  const xStep = chartData.dates.length>1 ? innerW/(chartData.dates.length-1) : innerW
-  const toPath = (vals: number[]) => vals.map((v,i)=>`${i===0?'M':'L'} ${PAD.left+i*xStep} ${PAD.top+innerH-(v/maxVal)*innerH}`).join(' ')
-  const labelIdxs = chartData.dates.length<=5 ? chartData.dates.map((_,i)=>i)
-    : [0,Math.floor(chartData.dates.length*0.25),Math.floor(chartData.dates.length*0.5),Math.floor(chartData.dates.length*0.75),chartData.dates.length-1]
+  const maxVal = Math.max(...(chartData.tags.map(t=>t.count)),1)
+  const barH = chartData.tags.length > 0 ? Math.min(20, (innerH / chartData.tags.length) - 4) : 20
 
   return (
     <div style={{background:'#111122',border:'1px solid #1e1e2e',borderRadius:16,marginBottom:24,overflow:'hidden'}}>
@@ -117,29 +111,22 @@ function TrendSection({ trendData }: { trendData: {tags:string[],published_at:st
       </button>
       {open && (
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:0,borderTop:'1px solid #1e1e2e'}}>
-          {/* 좌: 차트 */}
+          {/* 좌: 바 차트 */}
           <div style={{padding:'16px 20px 20px',borderRight:'1px solid #1e1e2e'}}>
-            <div style={{fontSize:11,color:'#555',marginBottom:12}}>일별 분야별 논문 수</div>
-            {chartData.dates.length > 0 ? (
+            <div style={{fontSize:11,color:'#555',marginBottom:12}}>분야별 논문 수 (Top 8)</div>
+            {chartData.tags.length > 0 ? (
               <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto'}}>
-                {[0,0.5,1].map(r=>(
-                  <line key={r} x1={PAD.left} y1={PAD.top+innerH*(1-r)} x2={PAD.left+innerW} y2={PAD.top+innerH*(1-r)} stroke="#1e1e2e" strokeWidth="1"/>
-                ))}
-                {[0,0.5,1].map(r=>(
-                  <text key={r} x={PAD.left-4} y={PAD.top+innerH*(1-r)+4} textAnchor="end" fontSize="9" fill="#444">{Math.round(maxVal*r)}</text>
-                ))}
-                {labelIdxs.map(i=>(
-                  <text key={i} x={PAD.left+i*xStep} y={H-6} textAnchor="middle" fontSize="9" fill="#444">{chartData.dates[i]?.slice(5)}</text>
-                ))}
-                {chartData.series.map(s=>(
-                  <path key={s.tag} d={toPath(s.values)} fill="none" stroke={s.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" opacity="0.85"/>
-                ))}
-                {chartData.series.map((s,i)=>(
-                  <g key={s.tag} transform={`translate(${W-PAD.right+10},${PAD.top+i*20})`}>
-                    <line x1="0" y1="6" x2="14" y2="6" stroke={s.color} strokeWidth="2"/>
-                    <text x="18" y="10" fontSize="10" fill="#888">{s.tag}</text>
-                  </g>
-                ))}
+                {chartData.tags.map((t,i) => {
+                  const y = PAD.top + i * (innerH / chartData.tags.length) + 2
+                  const barWidth = (t.count / maxVal) * innerW
+                  return (
+                    <g key={t.tag}>
+                      <text x={PAD.left-6} y={y + barH/2 + 4} textAnchor="end" fontSize="10" fill="#888">{t.tag}</text>
+                      <rect x={PAD.left} y={y} width={barWidth} height={barH} rx={4} fill={t.color} opacity={0.85}/>
+                      <text x={PAD.left + barWidth + 6} y={y + barH/2 + 4} fontSize="10" fill="#666">{t.count}</text>
+                    </g>
+                  )
+                })}
               </svg>
             ) : (
               <div style={{fontSize:12,color:'#444',padding:'2rem 0',textAlign:'center'}}>데이터 수집 후 표시됩니다</div>
