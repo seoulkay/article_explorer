@@ -19,14 +19,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ analysis: cached.analysis_text, cached: true })
   }
 
-  // 최근 7일 논문 데이터 수집
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-  const papers = await executeQuery<{ title_ko: string; tags: any; summary_ko: string; published_at: string }>(
-    `SELECT title_ko, tags, summary_ko, published_at FROM papers
-     WHERE published_at >= :1::TIMESTAMP_NTZ
-     ORDER BY published_at DESC
-     LIMIT 100`,
-    [sevenDaysAgo]
+  // 최근 수집 논문 50편 기준 분석
+  const papers = await executeQuery<{ title_ko: string; tags: any; summary_ko: string; published_at: string; source: string; journal_name: string }>(
+    `SELECT title_ko, tags, summary_ko, published_at, source, journal_name FROM papers
+     ORDER BY created_at DESC
+     LIMIT 50`,
+    []
   )
 
   if (!papers || papers.length === 0) {
@@ -44,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // 최근 논문 제목 샘플 (최대 20개)
   const titleSample = papers.slice(0, 20).map(p => p.title_ko || '').filter(Boolean).join('\n')
 
-  const prompt = `다음은 최근 7일간 arXiv에 등록된 AI 논문 ${papers.length}편의 데이터입니다.
+  const prompt = `다음은 최근 수집된 AI 논문 ${papers.length}편의 데이터입니다 (arXiv + SCIE 저널).
 
 분야별 논문 수:
 ${topTags.map(([tag, cnt]) => `- ${tag}: ${cnt}편`).join('\n')}
@@ -54,7 +52,7 @@ ${titleSample}
 
 위 데이터를 바탕으로 "최근 AI 연구 트렌드 분석"을 다음 형식으로 작성해주세요:
 
-📌 **이번 주 AI 연구 핵심 트렌드**
+📌 **최근 수집 논문 기반 AI 연구 트렌드**
 
 **1. [가장 활발한 연구 분야]**
 (해당 분야에서 어떤 연구가 집중되고 있는지, 왜 주목받는지 2-3문장)
@@ -65,7 +63,7 @@ ${titleSample}
 **3. [떠오르는 연구 주제]**
 (논문 제목들에서 보이는 새로운 트렌드 2-3문장)
 
-**💡 이번 주 인사이트**
+**💡 인사이트**
 (전체적인 흐름에서 주목할 만한 점을 2-3문장으로 정리)
 
 전문 용어는 괄호로 풀어서 설명해주세요. 구체적이고 흥미롭게 작성해주세요.`

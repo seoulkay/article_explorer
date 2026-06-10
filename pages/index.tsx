@@ -110,7 +110,7 @@ function TrendSection({ trendData }: { trendData: {tags:string[],published_at:st
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <span style={{fontSize:14}}>📊</span>
           <span style={{fontSize:13,fontWeight:600,color:'#e2e2e8'}}>분야별 논문 트렌드 & AI 분석</span>
-          <span style={{fontSize:11,color:'#555'}}>최근 30일</span>
+          <span style={{fontSize:11,color:'#555'}}>최근 50편 기준</span>
           {analysisCached && <span style={{fontSize:10,color:'#555',background:'#1e1e2e',padding:'1px 6px',borderRadius:4}}>캐시</span>}
         </div>
         <span style={{fontSize:11,color:'#555',display:'inline-block',transform:open?'rotate(180deg)':'rotate(0deg)',transition:'transform 0.2s'}}>▼</span>
