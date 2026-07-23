@@ -4,7 +4,7 @@ import { executeQuery, executeOne } from '../../lib/snowflake'
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { tag, q, page = '1', limit = '20', showFailed = 'false' } = req.query
+  const { tag, q, page = '1', limit = '20', showFailed = 'false', source } = req.query
   const pageNum = parseInt(page as string)
   const limitNum = parseInt(limit as string)
   const offset = (pageNum - 1) * limitNum
@@ -22,6 +22,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (tag && tag !== '전체') {
     binds.push(JSON.stringify(tag as string)) // e.g. '"LLM"'
     conditions.push(`ARRAY_CONTAINS(PARSE_JSON(:${binds.length}), tags)`)
+  }
+
+  if (source && source !== '전체') {
+    binds.push(source as string)
+    conditions.push(`source = :${binds.length}`)
   }
 
   if (q) {

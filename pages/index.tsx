@@ -325,6 +325,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [crawling, setCrawling] = useState(false)
   const [selectedTag, setSelectedTag] = useState('전체')
+  const [selectedSource, setSelectedSource] = useState('전체')
   const [query, setQuery] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [selectedPaper, setSelectedPaper] = useState<Paper|null>(null)
@@ -339,14 +340,14 @@ export default function Home() {
   const fetchPapers = useCallback(async () => {
     setLoading(true)
     try {
-      const params = new URLSearchParams({ page:String(page), limit:'20', showFailed:String(showFailed), ...(selectedTag!=='전체'&&{tag:selectedTag}), ...(query&&{q:query}) })
+      const params = new URLSearchParams({ page:String(page), limit:'20', showFailed:String(showFailed), ...(selectedTag!=='전체'&&{tag:selectedTag}), ...(query&&{q:query}), ...(selectedSource!=='전체'&&{source:selectedSource}) })
       const res = await fetch(`/api/papers?${params}`)
       const data = await res.json()
       setPapers(data.papers||[])
       setTotal(data.total||0)
       if (data.trendData) setTrendData(data.trendData)
     } finally { setLoading(false) }
-  }, [page, selectedTag, query, showFailed])
+  }, [page, selectedTag, query, showFailed, selectedSource])
 
   useEffect(()=>{ fetchPapers() },[fetchPapers])
 
@@ -434,6 +435,16 @@ export default function Home() {
                 <button onClick={()=>{setShowFailed(v=>!v);setPage(1)}} style={{height:44,padding:'0 16px',background:showFailed?'#2e1111':'#1a1a2e',border:`1px solid ${showFailed?'#ef4444':'#2e2e4e'}`,borderRadius:12,color:showFailed?'#f87171':'#555',fontSize:12,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>
                   {showFailed?'⚠️ 분석실패 포함':'분석실패 숨김'}
                 </button>
+              </div>
+              {/* 출처 필터 */}
+              <div style={{display:'flex',gap:8,marginBottom:'0.75rem',alignItems:'center'}}>
+                <span style={{fontSize:11,color:'#555',minWidth:32}}>출처</span>
+                {(['전체','arxiv','scie'] as const).map(src=>(
+                  <button key={src} onClick={()=>{setSelectedSource(src);setPage(1)}}
+                    style={{height:28,padding:'0 14px',background:selectedSource===src?(src==='scie'?'#1e3e1e':src==='arxiv'?'#1e1e3f':'#2a2a3e'):'#131320',border:`1px solid ${selectedSource===src?(src==='scie'?'#86efac':src==='arxiv'?'#818cf8':'#6366f1'):'#2e2e4e'}`,borderRadius:20,color:selectedSource===src?(src==='scie'?'#86efac':src==='arxiv'?'#818cf8':'#aaa'):'#555',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',transition:'all 0.15s'}}>
+                    {src==='전체'?'전체':src==='scie'?'SCIE':'arXiv'}
+                  </button>
+                ))}
               </div>
               <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:'1.5rem'}}>
                 {ALL_TAGS.map(tag=>(
