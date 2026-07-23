@@ -17,11 +17,7 @@ snowflake.configure({ logLevel: 'ERROR' })
 
 // ── 대상 SCIE 저널 목록 ──
 const JOURNALS = [
-  { issn: '2169-3536', name: 'IEEE Access' },
   { issn: '0893-6080', name: 'Neural Networks' },
-  { issn: '0031-3203', name: 'Pattern Recognition' },
-  { issn: '0957-4174', name: 'Expert Systems with Applications' },
-  { issn: '0950-7051', name: 'Knowledge-Based Systems' },
   { issn: '0004-3702', name: 'Artificial Intelligence' },
 ]
 
